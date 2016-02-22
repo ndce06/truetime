@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<!-- <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css" integrity="sha384-1q8mTJOASx8j1Au+a5WDVnPi2lkFfwwEAa8hDDdjZlpLegxhjVME1fgjWPGmkzs7" crossorigin="anonymous"> -->
+		<link rel="stylesheet" href="bootstrap.min.css">
+		<title>True Time</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<style type="text/css">
+			.txt { width: 30px; }
+		</style>
+		<script src="angular.min.js"></script>
+		<script src="angular-sanitize.js"></script>
+		<!---<script src="//ajax.googleapis.com/ajax/libs/angularjs/1.5.0/angular-sanitize.js"></script>-->
+		<script type="text/javascript">
+			angular.module("appTrueTime", ['ngSanitize'])
+				.service("trueTime", function(){
+					function getWeekStartDate(start)
+					{
+				        //Calcing the starting day (0 for sun, 1 for mon)
+					    start = start || 1;
+					    var today = new Date();
+					    today.setHours(0, 0, 0, 0);
+					    var day = (today.getDay() < start) ? today.getDay() - (7 - start) : start - today.getDay();
+
+				        // Grabbing Start/End Dates
+				        today.setDate(today.getDate() + day);
+					    var StartDate = today;
+					    return StartDate;
+					}
+
+					function toMinutes(hh,mm) {
+						return (parseInt(hh)*60) + parseInt(mm);
+					}
+
+					function toHHMM (minutes) {
+						var hh = Math.floor( parseInt(minutes) / 60);
+						var mm = parseInt(minutes) % 60;
+						return {'hh': hh, 'mm': mm};
+					}
+
+					this.getCurrentWeekDays = function() {
+						var dt = getWeekStartDate();
+						var days = {};
+						var arrDays = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+						var arrMonth = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Nov","Dec"];
+						for(i=0; i<7; i++) {
+							days["day_"+i] = {
+								"hh": "",
+								"mm": "",
+								"isHoliday": (i===5 || i===6) ? true : false,
+								"name": arrDays[dt.getDay()] + " (" + dt.getDate() + "-" + arrMonth[dt.getMonth()] + ")"
+							};
+							dt.setDate(dt.getDate() + 1);
+						}
+						return days;
+					};
+
+					this.getSummary = function(days) {
+						var totalDay = 0, totalMM = 0, msg = "";
+						var requiredMM = 2700; // 45 hrs = 2700 minutes
+						angular.forEach(days, function(d){
+							if(!d.isHoliday && d.hh && d.mm && !isNaN(d.hh) && !isNaN(d.mm)) {
+								totalDay++;
+								totalMM += toMinutes(d.hh, d.mm);
+							}
+						});
+
+						totalDay = (totalDay > 5) ? 5 : totalDay;
+						if(totalDay === 0) {
+							return '';
+						}
+						var avgMM = Math.floor(totalMM / totalDay);
+
+						var pendingDays = 5 - totalDay;
+						var avgPendingMM = 0;
+						var pendingMM = requiredMM - totalMM;
+						pendingMM = (pendingMM > 0) ? pendingMM : 0;
+
+						if(pendingDays > 0) {
+							avgPendingMM = Math.floor(pendingMM / pendingDays);
+						}
+
+						var avg = toHHMM(avgMM);
+						var pending = toHHMM(avgPendingMM);
+						msg = "Your average time is : <b>" + avg.hh + " hour(s) and " + avg.mm + " minute(s)</b>";
+						if(pendingMM > 0) {
+							msg += "<br> You need <b>" + pending.hh + " hour(s) and " + pending.mm + " minute(s)</b> each day.";
+						} 
+
+						return {
+							avg : avg,
+							pending : pending,
+							msg : msg
+						}
+
+					};
+				})
+				.controller("trueTimeController",["trueTime", function(trueTime){
+					var self = this;
+					self.days = trueTime.getCurrentWeekDays();
+					self.summary = {};
+
+					self.getSummary = function() {
+						self.summary = trueTime.getSummary(self.days);
+						return self.summary;
+					}
+				}]);
+		</script>
+	</head>
+	<body ng-app="appTrueTime">
+		<div class="container" ng-controller="trueTimeController as ttCtrl">
+			<div class="page-header">
+				<h1>True Time <small>Calculate how much time need to spend in office</small></h1>
+			</div>
+			<div class="panel panel-primary">
+				<div class="panel-heading">
+					<h3 class="panel-title">True Time</h3>
+				</div>
+				<div class="panel-body">
+					<div class="table-responsive">
+						<table class="table">
+							<thead> 
+								<tr> 
+									<th>Day</th> 
+									<th>Holiday</th> 
+									<th>Time (HH:MM)</th> 
+									<th>Remarks</th> 
+								</tr> 
+							</thead> 
+							<tbody> 
+								<tr ng-repeat="(key,value) in ttCtrl.days" ng-class="{'danger' : ttCtrl.days[key].isHoliday, 'success': !ttCtrl.days[key].isHoliday && ttCtrl.days[key].hh && ttCtrl.days[key].mm}"> 
+									<td>{{ttCtrl.days[key].name}}</td> 
+									<th scope="row">
+										<input type="checkbox" name="{{key}}_isHoliday" ng-model="ttCtrl.days[key].isHoliday" />
+									</th> 
+									<td>
+										<input type="text" class="txt" placeholder="HH" name="{{key}}_hh" ng-model="ttCtrl.days[key].hh" maxlength="2" /> : 
+										<input type="text" class="txt" placeholder="MM" name="{{key}}_mm" ng-model="ttCtrl.days[key].mm" maxlength="2" /> 
+									</td> 
+									<td>
+										<span ng-if="!ttCtrl.days[key].isHoliday && !ttCtrl.days[key].hh && !ttCtrl.days[key].mm">
+											You need <b>{{ttCtrl.summary.pending.hh}} hour(s) and {{ttCtrl.summary.pending.mm}} minute(s)</b>.
+										</span>
+									</td> 
+								</tr> 
+							</tbody>
+						</table>
+					</div>
+				</div>
+				<div class="panel-footer" ng-bind-html="ttCtrl.getSummary().msg"></div>
+			</div>
+		</div>
+		<!-- 
+		<script src="http://code.jquery.com/jquery-1.12.0.min.js"></script>
+		<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.5.0/angular.min.js"></script>
+		<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js" integrity="sha384-0mSbJDEHialfmuBBQP6A4Qrprq5OVfW37PRR3j5ELqxss1yVqOtnepnHVP9aJ7xS" crossorigin="anonymous"></script>
+		-->
+		<script src="jquery-1.12.0.min.js"></script>
+		<script src="bootstrap.min.js"></script>
+	</body>
+</html>
